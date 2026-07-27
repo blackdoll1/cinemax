@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FILMS, getAllGenres } from '../data/films';
-import { FilmStatus } from '../types';
+import { fetchFilms } from '../api';
+import { Film, FilmStatus } from '../types';
 import FilmCard from '../components/FilmCard';
 
 const STATUS_OPTS: { key: FilmStatus; label: string }[] = [
@@ -14,22 +14,38 @@ export default function HomePage() {
   const { state, setFilterStatus, setFilterGenre } = useApp();
   const { filterStatus, filterGenre } = state;
 
-  // Genres disponibles pour le statut actif uniquement
-  const genres = getAllGenres(filterStatus);
+  const [films, setFilms]     = useState<Film[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
 
-  // Films filtrés : d'abord par statut, ensuite par genre si ≠ "Tous"
-  const filtered = FILMS
-    .filter(f => f.status === filterStatus)
-    .filter(f =>
-      filterGenre === 'Tous'
-        ? true
-        : f.genre.split(', ').map(g => g.trim()).includes(filterGenre)
-    );
+  // Charger les films depuis l'API à chaque changement de filtre
+  useEffect(() => {
+    const loadFilms = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchFilms(filterStatus, filterGenre);
+        setFilms(data);
+      } catch (err) {
+        setError('Impossible de charger les films. Vérifiez que le backend tourne.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFilms();
+  }, [filterStatus, filterGenre]);
+
+  // Extraire les genres uniques depuis les films chargés
+  const genres = ['Tous', ...Array.from(
+    new Set(films.flatMap(f => f.genre.split(', ').map(g => g.trim())))
+  ).sort()];
 
   return (
     <div className="p-6">
 
-      {/* ── Filtre Statut ───────────────────────────────────────────────────── */}
+      {/* ── Filtre Statut ──────────────────────────────────────────────────── */}
       <div className="mb-4">
         <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 font-medium">Statut</p>
         <div className="flex flex-wrap gap-2">
@@ -53,34 +69,51 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Filtre Genre ────────────────────────────────────────────────────── */}
-      <div className="mb-6">
-        <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 font-medium">Genre</p>
-        <div className="flex flex-wrap gap-2">
-          {genres.map(genre => (
-            <button
-              key={genre}
-              onClick={() => setFilterGenre(genre)}
-              className={`px-3 py-1 rounded-full border text-xs transition-all ${
-                filterGenre === genre
-                  ? 'border-red-700 text-red-400 bg-red-900/20'
-                  : 'border-[#2E2E2E] text-[#888] hover:border-[#444] hover:text-[#ccc]'
-              }`}
-            >
-              {genre}
-            </button>
-          ))}
+      {/* ── Filtre Genre ───────────────────────────────────────────────────── */}
+      {!loading && films.length > 0 && (
+        <div className="mb-6">
+          <p className="text-[10px] uppercase tracking-widest text-[#555] mb-2 font-medium">Genre</p>
+          <div className="flex flex-wrap gap-2">
+            {genres.map(genre => (
+              <button
+                key={genre}
+                onClick={() => setFilterGenre(genre)}
+                className={`px-3 py-1 rounded-full border text-xs transition-all ${
+                  filterGenre === genre
+                    ? 'border-red-700 text-red-400 bg-red-900/20'
+                    : 'border-[#2E2E2E] text-[#888] hover:border-[#444] hover:text-[#ccc]'
+                }`}
+              >
+                {genre}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ── Grille ─────────────────────────────────────────────────────────── */}
-      {filtered.length > 0 ? (
+      {/* ── États de chargement ────────────────────────────────────────────── */}
+      {loading && (
+        <div className="flex items-center justify-center h-48">
+          <div className="text-[#888] text-sm animate-pulse">Chargement des films...</div>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center justify-center h-48">
+          <div className="text-red-400 text-sm text-center">{error}</div>
+        </div>
+      )}
+
+      {/* ── Grille de films ────────────────────────────────────────────────── */}
+      {!loading && !error && films.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {filtered.map(film => (
-            <FilmCard key={film.id} film={film} />
+          {films.map(film => (
+            <FilmCard key={film._id || film.id} film={film} />
           ))}
         </div>
-      ) : (
+      )}
+
+      {!loading && !error && films.length === 0 && (
         <p className="text-center text-[#555] mt-16 text-sm">
           Aucun film dans cette catégorie.
         </p>
