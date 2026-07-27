@@ -81,3 +81,4 @@ npm run build
 ```
 
 Les fichiers sont générés dans `dist/`.
+"# cinemax_frondend" 
